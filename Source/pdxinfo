@@ -1,0 +1,6 @@
+name=ZzFX
+author=Frank Force
+description=ZzFX sound effect synth ported to Playdate - sounds generated live from code, no audio files.
+bundleID=com.frankforce.zzfx
+version=1.0
+buildNumber=1

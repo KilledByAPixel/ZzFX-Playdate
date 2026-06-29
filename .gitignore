@@ -1,0 +1,14 @@
+# Playdate build outputs
+build/
+ZzFX.pdx/
+
+# Common editor/system noise
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Crash/reporting artifacts
+.sentry-native/
+
+# Local agent/config folders
+.claude/
