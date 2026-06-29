@@ -26,7 +26,7 @@ Fast workflow:
 import "zzfx"
 
 -- Coin
-zzfx({nil, nil, 1675, nil, .06, .24, 1, 1.82, nil, nil, 837, .06})
+zzfx({nil,0,988,nil,nil,.4,nil,33,nil,nil,331,.1})
 
 -- Simple beep
 zzfx({nil, nil, 220})
