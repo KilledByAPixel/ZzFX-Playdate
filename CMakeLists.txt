@@ -1,37 +1,31 @@
-# CMakeLists.txt for the ZzFX Playdate demo (recommended on Windows).
-#
-# Simulator build (Windows, needs Visual Studio or MinGW + CMake):
-#   mkdir build
-#   cd build
-#   cmake ..
-#   cmake --build .
-#
-# Device build (needs the ARM GNU toolchain, arm-none-eabi-gcc):
-#   mkdir build-device & cd build-device
-#   cmake .. -G "Unix Makefiles" -DCMAKE_TOOLCHAIN_FILE=%PLAYDATE_SDK_PATH%/C_API/buildsupport/arm.cmake
-#   cmake --build .
-#
 cmake_minimum_required(VERSION 3.14)
 set(CMAKE_C_STANDARD 11)
 
 set(ENVSDK $ENV{PLAYDATE_SDK_PATH})
-
-if (NOT ${ENVSDK} STREQUAL "")
-	# Convert path from Windows
-	file(TO_CMAKE_PATH ${ENVSDK} SDK)
-else()
-	execute_process(
-		COMMAND bash -c "egrep '^\\s*SDKRoot' $HOME/.Playdate/config"
-		COMMAND head -n 1
-		COMMAND cut -c9-
-		OUTPUT_VARIABLE SDK
-		OUTPUT_STRIP_TRAILING_WHITESPACE
-	)
+if (NOT "${ENVSDK}" STREQUAL "")
+	file(TO_CMAKE_PATH "${ENVSDK}" SDK)
 endif()
 
-if (NOT EXISTS ${SDK})
-	message(FATAL_ERROR "SDK Path not found; set the PLAYDATE_SDK_PATH environment variable")
-	return()
+if ("${SDK}" STREQUAL "")
+	set(CONFIG_CANDIDATES
+		"$ENV{HOME}/.Playdate/config"
+		"$ENV{USERPROFILE}/.Playdate/config"
+	)
+	foreach(CONFIG_PATH IN LISTS CONFIG_CANDIDATES)
+		if (EXISTS "${CONFIG_PATH}")
+			file(STRINGS "${CONFIG_PATH}" SDKROOT_LINE REGEX "^[ \t]*SDKRoot")
+			if (SDKROOT_LINE)
+				string(REGEX REPLACE "^[ \t]*SDKRoot[ \t]*" "" SDK "${SDKROOT_LINE}")
+				string(STRIP "${SDK}" SDK)
+				file(TO_CMAKE_PATH "${SDK}" SDK)
+				break()
+			endif()
+		endif()
+	endforeach()
+endif()
+
+if ("${SDK}" STREQUAL "" OR NOT EXISTS "${SDK}")
+	message(FATAL_ERROR "Playdate SDK path not found. Set PLAYDATE_SDK_PATH or configure ~/.Playdate/config.")
 endif()
 
 set(CMAKE_CONFIGURATION_TYPES "Debug;Release")

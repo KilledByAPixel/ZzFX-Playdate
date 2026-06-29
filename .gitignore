@@ -8,9 +8,6 @@ Source/pdex.dll
 .DS_Store
 Thumbs.db
 
-# Crash/reporting artifacts
-.sentry-native/
-
 # Local agent/config folders
 .claude/
 CLAUDE.md
