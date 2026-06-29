@@ -7,6 +7,19 @@ paste the params into Lua, and play it instantly. No audio asset files needed.
 
 This repo includes a playable demo app.
 
+## Make sounds with the ZzFX editor
+
+Use the ZzFX sound editor here:
+
+https://killedbyapixel.github.io/ZzFX/
+
+Fast workflow:
+
+1. Build a sound in the editor.
+2. Copy the generated ZzFX array.
+3. Replace JavaScript empty slots with `nil`.
+4. Paste into `zzfx({...})` in Lua.
+
 ## Quick start
 
 ```lua
@@ -77,6 +90,13 @@ This is normal for mixed Lua + C Playdate projects.
 
 A = Coin, B = Laser, Up = Jump, Down = Explosion, Left = Hit,
 Right = Powerup, Crank = musical scale.
+
+## Demo screenshot
+
+Adding one screenshot from Playdate Simulator is a great idea and makes the
+repo feel much more approachable at a glance.
+
+Suggested capture: menu/list view showing button mappings plus "Last" sound.
 
 ## API
 
