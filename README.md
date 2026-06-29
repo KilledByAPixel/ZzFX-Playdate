@@ -9,16 +9,16 @@ This repo includes a playable demo app.
 
 ## Make sounds with the ZzFX editor
 
-Use the ZzFX sound editor here:
+Open the ZzFX sound editor:
 
 https://killedbyapixel.github.io/ZzFX/
 
-Fast workflow:
+Quick workflow:
 
 1. Build a sound in the editor.
-2. Copy the generated ZzFX array.
-3. Replace JavaScript empty slots with `nil`.
-4. Paste into `zzfx({...})` in Lua.
+2. Select the Lua radio button.
+3. Copy the generated Lua-style output.
+4. Paste it directly into your Lua code.
 
 ## Quick start
 
@@ -36,21 +36,7 @@ local f = zzfxGetNote(7, 220)
 zzfx({nil, nil, f, nil, .04, .12})
 ```
 
-## Pasting from the ZzFX designer
-
-The designer outputs JavaScript sparse arrays, for example:
-
-```js
-zzfx(...[,,1675,,.06,.24,1,1.82,,,837,.06]);
-```
-
-In Lua, replace each gap with `nil`:
-
-```lua
-zzfx({nil,nil,1675,nil,.06,.24,1,1.82,nil,nil,837,.06})
-```
-
-Trailing unused params can be omitted.
+The Lua output is ready to paste as-is. No sparse-array conversion needed.
 
 ## Build
 
@@ -86,26 +72,15 @@ Then open `ZzFX.pdx` in the Playdate Simulator.
 
 This is normal for mixed Lua + C Playdate projects.
 
-## Demo controls
-
-A = Coin, B = Laser, Up = Jump, Down = Explosion, Left = Hit,
-Right = Powerup, Crank = musical scale.
-
-## Demo screenshot
-
-![ZzFX for Playdate demo screenshot](screenshot.png)
-
 ## API
 
 - `zzfx(paramsTable)` plays one sound from ZzFX-style params (21-slot array format).
 - `zzfxGetNote(semitoneOffset, rootFrequency)` returns note frequency.
 - C API is available in `src/zzfx.h` (`zzfx_init`, `zzfx_register_lua`, `zzfx_play`).
 
-## Notes
+## Demo
 
-- This is a faithful C port of `ZZFX.buildSamples` at 44100 Hz.
-- If output is too quiet on speaker, raise `ZZFX_PLAYBACK_VOLUME` in `src/zzfx.c`.
+A = Coin, B = Laser, Up = Jump, Down = Explosion, Left = Hit,
+Right = Powerup, Crank = musical scale.
 
-## License
-
-MIT. See `LICENSE`.
+![ZzFX for Playdate demo screenshot](screenshot.png)
