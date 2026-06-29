@@ -1,6 +1,7 @@
 # Playdate build outputs
 build/
 ZzFX.pdx/
+Source/pdex.dll
 
 # Common editor/system noise
 .vscode/
