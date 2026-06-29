@@ -120,7 +120,6 @@ end
 
 local function drawWaveformPanel()
     local panelX, panelY, panelW, panelH = 228, 54, 160, 126
-    gfx.drawText("Waveform", panelX + 8, panelY - 20)
     gfx.drawRect(panelX, panelY, panelW, panelH)
 
     local midY = panelY + math_floor(panelH / 2)
