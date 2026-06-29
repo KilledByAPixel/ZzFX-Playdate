@@ -93,10 +93,7 @@ Right = Powerup, Crank = musical scale.
 
 ## Demo screenshot
 
-Adding one screenshot from Playdate Simulator is a great idea and makes the
-repo feel much more approachable at a glance.
-
-Suggested capture: menu/list view showing button mappings plus "Last" sound.
+![ZzFX for Playdate demo screenshot](screenshot.png)
 
 ## API
 
