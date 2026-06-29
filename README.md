@@ -75,6 +75,11 @@ This is normal for mixed Lua + C Playdate projects.
 ## API
 
 - `zzfx(paramsTable)` plays one sound from ZzFX-style params (21-slot array format).
+- `zzfxSound(paramsTable, randomness?)` creates a cached sound object.
+- Create cached `zzfxSound` objects at startup and reuse them during gameplay.
+- `sound:play(pitch?, randomnessScale?)` plays the cached sound.
+- `sound:playNote(semitoneOffset?)` plays the cached sound as a note.
+- `sound:free()` releases cached sample memory.
 - `zzfxGetNote(semitoneOffset, rootFrequency)` returns note frequency.
 - C API is available in `src/zzfx.h` (`zzfx_init`, `zzfx_register_lua`, `zzfx_play`).
 

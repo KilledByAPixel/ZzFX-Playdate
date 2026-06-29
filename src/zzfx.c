@@ -14,6 +14,7 @@
 
 #define ZZFX_SAMPLE_RATE   44100     // Playdate's native audio rate
 #define ZZFX_NUM_VOICES    16        // how many sounds can overlap
+#define ZZFX_MAX_CACHED    64        // max cached zzfxSound objects
 
 // ZZFX.volume from the JS library (master scale). NOTE: the original applies
 // this twice (once while building samples, once on the playback gain node),
@@ -30,10 +31,18 @@ static PlaydateAPI* PD = NULL;
 typedef struct {
     SamplePlayer* player;
     AudioSample*  sample;   // freed (with its data) before the slot is reused
+    int ownsSample;         // 1 for one-shot samples, 0 for cached/shared samples
 } ZzfxVoice;
 
 static ZzfxVoice gVoices[ZZFX_NUM_VOICES];
 static int gVoiceCursor = 0;
+
+typedef struct {
+    AudioSample* sample;
+    int used;
+} ZzfxCachedSound;
+
+static ZzfxCachedSound gCached[ZZFX_MAX_CACHED];
 
 // ---- helpers ----------------------------------------------------------------
 
@@ -209,7 +218,15 @@ void zzfx_init(PlaydateAPI* pd)
     {
         gVoices[i].player = pd->sound->sampleplayer->newPlayer();
         gVoices[i].sample = NULL;
+        gVoices[i].ownsSample = 0;
     }
+
+    for (int i = 0; i < ZZFX_MAX_CACHED; i++)
+    {
+        gCached[i].sample = NULL;
+        gCached[i].used = 0;
+    }
+
     gVoiceCursor = 0;
 }
 
@@ -228,7 +245,10 @@ void zzfx_play(const double p[21])
 
     // recycle the slot: stop and free whatever played here last
     PD->sound->sampleplayer->stop(v->player);
-    if (v->sample) { PD->sound->sample->freeSample(v->sample); v->sample = NULL; }
+    if (v->sample && v->ownsSample)
+        PD->sound->sample->freeSample(v->sample);
+    v->sample = NULL;
+    v->ownsSample = 0;
 
     // newSampleFromData keeps a pointer to (does not copy) the buffer.
     // shouldFreeData = 1 -> freeSample() frees the PCM buffer for us.
@@ -240,6 +260,7 @@ void zzfx_play(const double p[21])
 
     PD->sound->sampleplayer->setSample(v->player, v->sample);
     PD->sound->sampleplayer->play(v->player, 1, 1.0f);
+    v->ownsSample = 1;
 }
 
 // ---- Lua binding ------------------------------------------------------------
@@ -266,9 +287,145 @@ static int lua_zzfx(lua_State* L)
     return 0;
 }
 
+static int lua_zzfx_cache_new(lua_State* L)
+{
+    (void)L;
+    static const double defaults[21] = {
+        1, 0.05, 220, 0, 0, 0.1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0
+    };
+
+    double p[21];
+    int n = PD->lua->getArgCount();
+    for (int i = 0; i < 21; i++)
+    {
+        int pos = i + 1;
+        if (pos > n || PD->lua->argIsNil(pos)) p[i] = defaults[i];
+        else                                   p[i] = (double)PD->lua->getArgFloat(pos);
+    }
+
+    int slot = -1;
+    for (int i = 0; i < ZZFX_MAX_CACHED; i++)
+    {
+        if (!gCached[i].used)
+        {
+            slot = i;
+            break;
+        }
+    }
+
+    if (slot < 0)
+    {
+        PD->system->logToConsole("zzfx: cache full (%d)", ZZFX_MAX_CACHED);
+        PD->lua->pushInt(0);
+        return 1;
+    }
+
+    int len = 0;
+    int16_t* pcm = zzfx_build(p[0], p[1], p[2], p[3], p[4], p[5], p[6],
+                              p[7], p[8], p[9], p[10], p[11], p[12], p[13],
+                              p[14], p[15], p[16], p[17], p[18], p[19], p[20], &len);
+    if (!pcm || len <= 0)
+    {
+        if (pcm) PD->system->realloc(pcm, 0);
+        PD->lua->pushInt(0);
+        return 1;
+    }
+
+    AudioSample* sample = PD->sound->sample->newSampleFromData(
+        (uint8_t*)pcm, kSound16bitMono, ZZFX_SAMPLE_RATE,
+        len * (int)sizeof(int16_t), 1);
+
+    if (!sample)
+    {
+        PD->system->realloc(pcm, 0);
+        PD->lua->pushInt(0);
+        return 1;
+    }
+
+    gCached[slot].sample = sample;
+    gCached[slot].used = 1;
+
+    PD->lua->pushInt(slot + 1); // 1-based IDs for Lua
+    return 1;
+}
+
+static int lua_zzfx_cache_play(lua_State* L)
+{
+    (void)L;
+    int n = PD->lua->getArgCount();
+    if (n < 1)
+        return 0;
+
+    int id = (int)PD->lua->getArgFloat(1);
+    if (id < 1 || id > ZZFX_MAX_CACHED)
+        return 0;
+
+    int slot = id - 1;
+    if (!gCached[slot].used || !gCached[slot].sample)
+        return 0;
+
+    float rate = 1.0f;
+    if (n >= 2 && !PD->lua->argIsNil(2))
+        rate = (float)PD->lua->getArgFloat(2);
+
+    if (rate < 0.01f) rate = 0.01f;
+
+    ZzfxVoice* v = &gVoices[gVoiceCursor];
+    gVoiceCursor = (gVoiceCursor + 1) % ZZFX_NUM_VOICES;
+
+    PD->sound->sampleplayer->stop(v->player);
+    if (v->sample && v->ownsSample)
+        PD->sound->sample->freeSample(v->sample);
+    v->sample = gCached[slot].sample;
+    v->ownsSample = 0;
+    PD->sound->sampleplayer->setSample(v->player, v->sample);
+    PD->sound->sampleplayer->play(v->player, 1, rate);
+    return 0;
+}
+
+static int lua_zzfx_cache_free(lua_State* L)
+{
+    (void)L;
+    int n = PD->lua->getArgCount();
+    if (n < 1)
+        return 0;
+
+    int id = (int)PD->lua->getArgFloat(1);
+    if (id < 1 || id > ZZFX_MAX_CACHED)
+        return 0;
+
+    int slot = id - 1;
+    if (!gCached[slot].used)
+        return 0;
+
+    for (int i = 0; i < ZZFX_NUM_VOICES; i++)
+    {
+        if (gVoices[i].sample == gCached[slot].sample)
+        {
+            PD->sound->sampleplayer->stop(gVoices[i].player);
+            gVoices[i].sample = NULL;
+            gVoices[i].ownsSample = 0;
+        }
+    }
+
+    if (gCached[slot].sample)
+    {
+        PD->sound->sample->freeSample(gCached[slot].sample);
+        gCached[slot].sample = NULL;
+    }
+    gCached[slot].used = 0;
+    return 0;
+}
+
 void zzfx_register_lua(PlaydateAPI* pd)
 {
     const char* err = NULL;
     if (!pd->lua->addFunction(lua_zzfx, "__zzfx", &err))
+        pd->system->logToConsole("zzfx: addFunction failed: %s", err ? err : "(unknown)");
+    if (!pd->lua->addFunction(lua_zzfx_cache_new, "__zzfxCacheNew", &err))
+        pd->system->logToConsole("zzfx: addFunction failed: %s", err ? err : "(unknown)");
+    if (!pd->lua->addFunction(lua_zzfx_cache_play, "__zzfxCachePlay", &err))
+        pd->system->logToConsole("zzfx: addFunction failed: %s", err ? err : "(unknown)");
+    if (!pd->lua->addFunction(lua_zzfx_cache_free, "__zzfxCacheFree", &err))
         pd->system->logToConsole("zzfx: addFunction failed: %s", err ? err : "(unknown)");
 }

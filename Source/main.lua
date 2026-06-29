@@ -27,6 +27,10 @@ local sounds <const> = {
     { key = "Right", name = "Powerup",   params = {nil,nil,1300,nil,nil,.2,1,nil,nil,nil,nil,nil,nil,nil,nil,nil,nil,nil,.1} },
 }
 
+for _, s in ipairs(sounds) do
+    s.sound = zzfxSound(s.params)
+end
+
 local zzfxDefaults <const> = {
     1, .05, 220, 0, 0, .1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0
 }
@@ -110,7 +114,7 @@ end
 local function playByKey(key)
     for _, s in ipairs(sounds) do
         if s.key == key then
-            zzfx(s.params)
+            s.sound:play()
             lastPlayed = s.name
             updateWaveform(s.params)
             return
