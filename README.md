@@ -36,41 +36,49 @@ local f = zzfxGetNote(7, 220)
 zzfx({nil, nil, f, nil, .04, .12})
 ```
 
-The Lua output is ready to paste as-is. No sparse-array conversion needed.
+The editor's Lua output is ready to paste as-is — it already uses `nil` for
+empty slots. (If you copy the JS output instead, replace each empty `,,` slot
+with `nil`.)
 
 ## Build
 
-Requires the [Playdate SDK](https://play.date/dev/) and `PLAYDATE_SDK_PATH` set.
+Requires the [Playdate SDK](https://play.date/dev/) with `PLAYDATE_SDK_PATH` set.
+Building for **device** additionally needs the
+[Arm GNU Toolchain](https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads)
+(`arm-none-eabi`).
+
+**macOS / Linux / MinGW:**
 
 ```bash
-make            # Simulator build -> ZzFX.pdx
+make            # Simulator -> ZzFX.pdx
 make device     # Device build (needs arm-none-eabi-gcc)
 ```
 
-Open `ZzFX.pdx` in Playdate Simulator.
-
-### Windows (CMake)
+**Windows:**
 
 ```powershell
 $env:PLAYDATE_SDK_PATH = "C:\Program Files (x86)\Playdate"
+# Simulator only:
 cmake -S . -B build -G "Visual Studio 17 2022"
 cmake --build build --config Release
+# Simulator + device, bundled into ZzFX.pdx (edit the toolchain paths inside first):
+powershell -ExecutionPolicy Bypass -File build.ps1
 ```
 
-Then open `ZzFX.pdx` in the Playdate Simulator.
+> **Note:** a simulator-only build produces a `.pdx` with no ARM binary — it runs
+> in the Simulator but crashes on hardware. Use `make device` / `build.ps1` for the
+> device build.
 
-## What ships in the repo
+Open `ZzFX.pdx` in the Simulator, or upload to hardware from its Device menu.
 
-- Demo source is shipped: `Source/main.lua` and `Source/zzfx.lua`.
-- C synth source is shipped: `src/zzfx.c`, `src/zzfx.h`, and `src/main.c`.
-- Built outputs are not shipped (`ZzFX.pdx/`, `build/`, `Source/pdex.dll` are ignored).
+## Use it in your own project
 
-## Why both Source and src?
+Copy `Source/zzfx.lua` plus the `src/` C files (`zzfx.c`, `zzfx.h`, `main.c`)
+into your Playdate project, build it (the synth is C, so the toolchain above is
+required), then `import "zzfx"` and call `zzfx({...})`.
 
-- `Source/` is the Playdate Lua/assets folder used by the SDK and simulator.
-- `src/` contains C source for the native synth and Lua binding.
-
-This is normal for mixed Lua + C Playdate projects.
+`Source/` is the Lua/assets folder the SDK builds; `src/` is the native C synth —
+the normal split for a mixed Lua + C Playdate project.
 
 ## API
 

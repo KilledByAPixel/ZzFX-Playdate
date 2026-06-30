@@ -16,6 +16,13 @@
 #define ZZFX_NUM_VOICES    16        // how many sounds can overlap
 #define ZZFX_MAX_CACHED    64        // max cached zzfxSound objects
 
+// Leading silence (in samples) prepended to every buffer, to absorb a click the
+// sample player injects shortly after it starts a sound (the audio output
+// settling as it wakes from idle -- the pop lands ~3-11 ms in, so the silence
+// must cover that span). 512 ~= 11.6 ms at 44100; 128 (~3 ms) was too short.
+// 11.6 ms of start latency is below the ~20-30 ms threshold of perception.
+#define ZZFX_LEAD_SILENCE  512
+
 // ZZFX.volume from the JS library (master scale). NOTE: the original applies
 // this twice (once while building samples, once on the playback gain node),
 // which gives ZzFX its characteristic, slightly conservative level. We keep
@@ -47,7 +54,7 @@ static ZzfxCachedSound gCached[ZZFX_MAX_CACHED];
 // ---- helpers ----------------------------------------------------------------
 
 static double zzfx_rand(void)            { return (double)rand() / ((double)RAND_MAX + 1.0); }
-static double sgn(double v)              { return v < 0.0 ? -1.0 : 1.0; }
+static float  sgnf(float v)              { return v < 0.0f ? -1.0f : 1.0f; }
 
 // ---- the synth (faithful port of ZZFX.buildSamples) -------------------------
 //
@@ -62,49 +69,69 @@ static int16_t* zzfx_build(
     double delay,         double sustainVolume, double decay,        double tremolo,
     double filter,        int* outLen)
 {
-    const double PI2 = M_PI * 2.0;
-    const double sampleRate = (double)ZZFX_SAMPLE_RATE;
+    // The synth runs in SINGLE precision (float) so it uses the Playdate's
+    // hardware FPU. The Cortex-M7 has no double-precision FPU, so doing this in
+    // double falls back to slow software emulation -- on device that overruns
+    // the watchdog while building the cached sounds (seconds of work -> black
+    // screen / reset). float is ~10-50x faster here and inaudibly different for
+    // these short sound effects. The one-time parameter scaling below is done
+    // in double for accuracy, then stored as float for the per-sample loop.
+    const float PI2 = (float)(M_PI * 2.0);
+    const double dSR = (double)ZZFX_SAMPLE_RATE;
+    const double dPI2 = M_PI * 2.0;
 
     // init parameters (mirrors the JS, line for line)
-    double startSlide     = slide *= 500.0 * PI2 / sampleRate / sampleRate;
-    double startFrequency = frequency *=
-        (1.0 + randomness * 2.0 * zzfx_rand() - randomness) * PI2 / sampleRate;
-    double modOffset = 0.0;
-    long   repeat = 0, crush = 0;
-    long   jump = 1;
-    double t = 0.0, s = 0.0, f;
+    float fslide = (float)(slide * (500.0 * dPI2 / dSR / dSR));
+    float startSlide = fslide;
+    float ffreq = (float)(frequency *
+        (1.0 + randomness * 2.0 * zzfx_rand() - randomness) * dPI2 / dSR);
+    float startFrequency = ffreq;
+    float modOffset = 0.0f;
+    long  repeat = 0, crush = 0, jump = 1;
+    float t = 0.0f, s = 0.0f, f;
 
-    // biquad LP/HP filter coefficients
-    double quality = 2.0, w = PI2 * fabs(filter) * 2.0 / sampleRate;
-    double cosw = cos(w), alpha = sin(w) / 2.0 / quality;
-    double a0 = 1.0 + alpha, a1 = -2.0 * cosw / a0, a2 = (1.0 - alpha) / a0;
-    double b0 = (1.0 + sgn(filter) * cosw) / 2.0 / a0;
-    double b1 = -(sgn(filter) + cosw) / a0, b2 = b0;
-    double x2 = 0, x1 = 0, y2 = 0, y1 = 0;
+    // biquad LP/HP filter coefficients (computed once; stored as float)
+    float ffilter = (float)filter;
+    float quality = 2.0f, w = PI2 * fabsf(ffilter) * 2.0f / (float)dSR;
+    float cosw = cosf(w), alpha = sinf(w) / 2.0f / quality;
+    float a0 = 1.0f + alpha, a1 = -2.0f * cosw / a0, a2 = (1.0f - alpha) / a0;
+    float b0 = (1.0f + sgnf(ffilter) * cosw) / 2.0f / a0;
+    float b1 = -(sgnf(ffilter) + cosw) / a0, b2 = b0;
+    float x2 = 0, x1 = 0, y2 = 0, y1 = 0;
 
-    // scale by sample rate
-    const double minAttack = 9.0;          // prevent pop if attack is 0
-    attack = attack * sampleRate;
-    if (attack == 0.0) attack = minAttack;
-    decay   *= sampleRate;
-    sustain *= sampleRate;
-    release *= sampleRate;
-    delay   *= sampleRate;
-    deltaSlide   *= 500.0 * PI2 / (sampleRate * sampleRate * sampleRate);
-    modulation   *= PI2 / sampleRate;
-    pitchJump    *= PI2 / sampleRate;
-    pitchJumpTime *= sampleRate;
-    long repeatTimeI = (long)(repeatTime * sampleRate);   // | 0
-    volume *= ZZFX_BUILD_VOLUME;
+    // scale by sample rate (float for the per-sample loop)
+    const float minAttack = 9.0f;          // prevent pop if attack is 0
+    float fattack = (float)(attack * dSR);
+    if (fattack == 0.0f) fattack = minAttack;
+    float fdecay   = (float)(decay   * dSR);
+    float fsustain = (float)(sustain * dSR);
+    float frelease = (float)(release * dSR);
+    float fdelay   = (float)(delay   * dSR);
+    float fdeltaSlide   = (float)(deltaSlide * (500.0 * dPI2 / (dSR * dSR * dSR)));
+    float fmodulation   = (float)(modulation * (dPI2 / dSR));
+    float fpitchJump    = (float)(pitchJump  * (dPI2 / dSR));
+    float fpitchJumpTime = (float)(pitchJumpTime * dSR);
+    long  repeatTimeI = (long)(repeatTime * dSR);          // | 0
+    float fvolume = (float)(volume * ZZFX_BUILD_VOLUME);
+    float fshapeCurve    = (float)shapeCurve;
+    float fsustainVolume = (float)sustainVolume;
+    float ftremolo = (float)tremolo;
+    float fnoise   = (float)noise;
+
+    // precomputed reciprocals: turn the per-sample envelope divides into cheaper
+    // multiplies (float divide is ~14 cycles on the M7 FPU, multiply ~1-3).
+    const float invAttack   = 1.0f / fattack;                                    // fattack >= 9, never 0
+    const float decayCoef   = (fdecay   > 0.0f) ? (1.0f - fsustainVolume) / fdecay   : 0.0f;
+    const float releaseCoef = (frelease > 0.0f) ? fsustainVolume / frelease         : 0.0f;
 
     int sh = (int)shape;
     int crushStep = (int)(bitCrush * 100.0);              // bitCrush*100 | 0
 
-    int length = (int)(attack + decay + sustain + release + delay);  // | 0
+    int length = (int)(fattack + fdecay + fsustain + frelease + fdelay);  // | 0
     if (length < 1) length = 1;
 
     // float work buffer (matches JS b[]); used for delay feedback too
-    double* b = (double*)PD->system->realloc(NULL, sizeof(double) * (size_t)length);
+    float* b = (float*)PD->system->realloc(NULL, sizeof(float) * (size_t)length);
     if (!b) { *outLen = 0; return NULL; }
 
     for (int i = 0; i < length; i++)
@@ -117,45 +144,61 @@ static int16_t* zzfx_build(
         if (doSample)
         {
             // wave shape
-            if      (sh == 0) s = sin(t);                                          // sin
-            else if (sh == 1) s = 1.0 - 4.0 * fabs(floor(t / PI2 + 0.5) - t / PI2);// triangle
-            else if (sh == 2) s = 1.0 - fmod(fmod(2.0 * t / PI2, 2.0) + 2.0, 2.0); // saw
-            else if (sh == 3) { double tv = tan(t); s = tv > 1.0 ? 1.0 : (tv < -1.0 ? -1.0 : tv); } // tan
-            else if (sh == 4) s = sin(t * t * t);                                  // noise
-            else              s = (fmod(t / PI2, 1.0) < shapeCurve / 2.0) ? 1.0 : -1.0; // square duty
+            if      (sh == 0) s = sinf(t);                                            // sin
+            else if (sh == 1) s = 1.0f - 4.0f * fabsf(floorf(t / PI2 + 0.5f) - t / PI2);// triangle
+            else if (sh == 2) s = 1.0f - fmodf(fmodf(2.0f * t / PI2, 2.0f) + 2.0f, 2.0f);// saw
+            else if (sh == 3) { float tv = tanf(t); s = tv > 1.0f ? 1.0f : (tv < -1.0f ? -1.0f : tv); } // tan
+            else if (sh == 4) s = sinf(t * t * t);                                    // noise
+            else              s = (fmodf(t / PI2, 1.0f) < fshapeCurve / 2.0f) ? 1.0f : -1.0f; // square duty
 
-            double trem = repeatTimeI
-                ? (1.0 - tremolo + tremolo * sin(PI2 * (double)i / (double)repeatTimeI))
-                : 1.0;
+            float trem = repeatTimeI
+                ? (1.0f - ftremolo + ftremolo * sinf(PI2 * (float)i / (float)repeatTimeI))
+                : 1.0f;
 
-            double shaped = (sh > 4) ? s : sgn(s) * pow(fabs(s), shapeCurve);
+            // shapeCurve == 1 is the common case (x^1 == x), so skip the costly powf
+            float shaped = (sh > 4 || fshapeCurve == 1.0f) ? s : sgnf(s) * powf(fabsf(s), fshapeCurve);
 
-            double env;
-            if      (i < attack)                       env = (double)i / attack;
-            else if (i < attack + decay)               env = 1.0 - ((double)i - attack) / decay * (1.0 - sustainVolume);
-            else if (i < attack + decay + sustain)     env = sustainVolume;
-            else if (i < length - delay)               env = ((double)length - (double)i - delay) / release * sustainVolume;
-            else                                       env = 0.0;
+            float env;
+            if      ((float)i <= fattack) {
+                // Include the attack boundary sample so the ramp reaches 1.0
+                // before leaving attack, avoiding a small discontinuity.
+                env = (float)i * invAttack;
+            }
+            else if ((float)i < fattack + fdecay && fdecay > 0.0f) {
+                env = 1.0f - ((float)i - fattack) * decayCoef;
+            }
+            else if ((float)i < fattack + fdecay + fsustain) {
+                env = fsustainVolume;
+            }
+            else if ((float)i < (float)length - fdelay) {
+                env = ((float)length - (float)i - fdelay) * releaseCoef;
+            }
+            else {
+                env = 0.0f;
+            }
+
+            if (env < 0.0f) env = 0.0f;
+            if (env > 1.0f) env = 1.0f;
 
             s = trem * shaped * env;
 
             // delay
-            if (delay != 0.0)
+            if (fdelay != 0.0f)
             {
-                double dterm;
-                if (delay > (double)i) dterm = 0.0;
+                float dterm;
+                if (fdelay > (float)i) dterm = 0.0f;
                 else {
-                    double rel = ((double)i < (double)length - delay) ? 1.0 : ((double)length - (double)i) / delay;
-                    dterm = rel * b[(long)((double)i - delay)] / 2.0 / volume;
+                    float rel = ((float)i < (float)length - fdelay) ? 1.0f : ((float)length - (float)i) / fdelay;
+                    dterm = rel * b[(long)((float)i - fdelay)] / 2.0f / fvolume;
                 }
-                s = s / 2.0 + dterm;
+                s = s / 2.0f + dterm;
             }
 
             // biquad filter (assignments evaluated left-to-right as in JS)
-            if (filter != 0.0)
+            if (ffilter != 0.0f)
             {
-                double X2 = x2, X1 = x1, Y2 = y2, Y1 = y1;
-                double out = b2 * X2 + b1 * X1 + b0 * s - a2 * Y2 - a1 * Y1;
+                float X2 = x2, X1 = x1, Y2 = y2, Y1 = y1;
+                float out = b2 * X2 + b1 * X1 + b0 * s - a2 * Y2 - a1 * Y1;
                 x2 = X1;   // x2 = x1
                 x1 = s;    // x1 = s
                 y2 = Y1;   // y2 = y1
@@ -164,47 +207,56 @@ static int16_t* zzfx_build(
             }
         }
 
-        b[i] = s * volume;   // store sample (JS: b[i++] = s * volume)
+        b[i] = s * fvolume;   // store sample (JS: b[i++] = s * volume)
 
-        // advance oscillator
-        slide += deltaSlide;
-        frequency += slide;
-        f = frequency * cos(modulation * modOffset);
-        modOffset += 1.0;
-        t += f + f * noise * sin(pow((double)i, 5.0));
+        // advance oscillator. The modulation cos and noise sin/pow are skipped
+        // when those params are 0 (the common case) -- mathematically identical
+        // (cos(0)=1, the noise term is *0) but avoids two transcendentals/sample.
+        fslide += fdeltaSlide;
+        ffreq  += fslide;
+        f = (fmodulation != 0.0f) ? ffreq * cosf(fmodulation * modOffset) : ffreq;
+        modOffset += 1.0f;
+        t += f;
+        if (fnoise != 0.0f)
+            t += f * fnoise * sinf(powf((float)i, 5.0f));
 
         // pitch jump
-        if (jump && (++jump > pitchJumpTime))
+        if (jump && (++jump > fpitchJumpTime))
         {
-            frequency      += pitchJump;
-            startFrequency += pitchJump;
+            ffreq          += fpitchJump;
+            startFrequency += fpitchJump;
             jump = 0;
         }
 
         // repeat
         if (repeatTimeI && ((++repeat % repeatTimeI) == 0))
         {
-            frequency = startFrequency;
-            slide     = startSlide;
+            ffreq  = startFrequency;
+            fslide = startSlide;
             if (!jump) jump = 1;
         }
     }
 
-    // convert to 16-bit PCM, applying the playback master gain and clamping
-    int16_t* pcm = (int16_t*)PD->system->realloc(NULL, sizeof(int16_t) * (size_t)length);
+    // convert to 16-bit PCM, applying the playback master gain and clamping.
+    // A block of leading silence (ZZFX_LEAD_SILENCE) is prepended so any click
+    // the sample player injects at start-of-playback lands in the silence.
+    const int pad = ZZFX_LEAD_SILENCE;
+    int16_t* pcm = (int16_t*)PD->system->realloc(NULL, sizeof(int16_t) * (size_t)(length + pad));
     if (!pcm) { PD->system->realloc(b, 0); *outLen = 0; return NULL; }
+
+    for (int i = 0; i < pad; i++) pcm[i] = 0;     // leading silence
 
     for (int i = 0; i < length; i++)
     {
-        double v = b[i] * ZZFX_PLAYBACK_VOLUME;
-        if (v != v) v = 0.0;                 // NaN guard
-        if (v >  1.0) v =  1.0;
-        if (v < -1.0) v = -1.0;
-        pcm[i] = (int16_t)(v * 32767.0);
+        float v = b[i] * (float)ZZFX_PLAYBACK_VOLUME;
+        if (v != v) v = 0.0f;                 // NaN guard
+        if (v >  1.0f) v =  1.0f;
+        if (v < -1.0f) v = -1.0f;
+        pcm[pad + i] = (int16_t)(v * 32767.0f);
     }
 
     PD->system->realloc(b, 0);
-    *outLen = length;
+    *outLen = length + pad;
     return pcm;
 }
 

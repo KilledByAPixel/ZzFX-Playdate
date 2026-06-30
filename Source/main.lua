@@ -8,6 +8,11 @@
 import "CoreLibs/graphics"
 import "zzfx"   -- provides the global zzfx({...})
 
+-- The Playdate plays its own system "crank tick" sound while the crank turns,
+-- which clashes with the notes we play on it. Turn it off (the OS automatically
+-- re-enables crank sounds when the game exits).
+playdate.setCrankSoundsDisabled(true)
+
 local gfx <const> = playdate.graphics
 local math_floor <const> = math.floor
 local math_min <const> = math.min
@@ -19,9 +24,10 @@ local math_abs <const> = math.abs
 -- A handful of ZzFX presets. Paste your own from https://killedbyapixel.github.io/ZzFX/
 -- (remember: replace JS empty array slots with `nil`).
 local sounds <const> = {
-    { key = "A",     name = "Coin",      params = {nil,nil,1675,nil,.06,.24,1,1.82,nil,nil,837,.06} },
+    { key = "A",     name = "Coin",      params = 
+    {nil,nil,1675,nil,.06,.24,1,1.82,nil,nil,837,.06} },
     { key = "B",     name = "Laser",     params = {nil,nil,471,nil,.09,.47,4,1.06,-6.7,nil,nil,nil,nil,.9,nil,.6,nil,.62,.06} },
-    { key = "Up",    name = "Jump",      params = {nil,nil,254,.02,nil,.02,nil,nil,7} },
+    { key = "Up",    name = "Jump",      params = {1.1,nil,254,.02,nil,.05,nil,nil,7} },
     { key = "Down",  name = "Explosion", params = {nil,nil,782,.03,.09,.31,3,2.62,nil,nil,nil,nil,nil,1.5,nil,.6,.06,.58} },
     { key = "Left",  name = "Hit",       params = {nil,nil,925,.04,.3,.6,1,.3,nil,6.27,-184,.09,.17} },
     { key = "Right", name = "Powerup",   params = {nil,nil,1300,nil,nil,.2,1,nil,nil,nil,nil,nil,nil,nil,nil,nil,nil,nil,.1} },
@@ -30,6 +36,13 @@ local sounds <const> = {
 for _, s in ipairs(sounds) do
     s.sound = zzfxSound(s.params)
 end
+
+-- The crank plays a musical scale. Build the beep ONCE as a cached sound, then
+-- pitch each note by changing playback rate (sound:playNote) instead of
+-- re-synthesizing a fresh ~0.8s sound on every crank step -- live synthesis per
+-- step stalls noticeably on the actual device.
+local crankBaseParams <const> = {nil,nil,220,.01,.5,.2,nil,nil,nil,nil,nil,nil,nil,nil,nil,nil,nil,1,.1}
+local crankSound = zzfxSound(crankBaseParams)
 
 local zzfxDefaults <const> = {
     1, .05, 220, 0, 0, .1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0
@@ -180,17 +193,16 @@ function playdate.downButtonDown()   playByKey("Down")  end
 function playdate.leftButtonDown()   playByKey("Left")  end
 function playdate.rightButtonDown()  playByKey("Right") end
 
--- Crank: play notes on a scale, one per ~30 degrees, using zzfxGetNote.
+-- Crank: play notes on a scale, one per ~30 degrees (pitched via playback rate).
 local lastNoteStep = nil
 function playdate.cranked(change, acceleratedChange)
     local step = math_floor(playdate.getCrankPosition() / 30)
     if step ~= lastNoteStep then
         lastNoteStep = step
-        -- a simple beep at the note frequency
-        local freq = zzfxGetNote(step, 220)
-        local params = {nil, nil, freq, nil, .04, .12, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, .05}
-        zzfx(params)
-        updateWaveform(params)
+        -- Pitch the pre-built crank sound to this scale step (semitone offset).
+        -- No per-step synthesis -- just a playback-rate change, so it's instant.
+        crankSound:playNote(step)
+        updateWaveform(crankBaseParams)
         lastPlayed = "note " .. step
     end
 end

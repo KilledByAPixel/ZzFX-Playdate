@@ -1,7 +1,13 @@
 # Playdate build outputs
 build/
+build_device/
 ZzFX.pdx/
+ZzFX_DEVICE.pdx/
 Source/pdex.dll
+Source/pdex.elf
+
+# Toolchain/build artifacts
+.sentry-native/
 
 # Common editor/system noise
 .vscode/
