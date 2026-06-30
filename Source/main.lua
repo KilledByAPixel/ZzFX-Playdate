@@ -32,7 +32,7 @@ local sounds <const> = {
 -- pitch each note by changing playback rate (sound:playNote) instead of
 -- re-synthesizing a fresh ~0.8s sound on every crank step -- live synthesis per
 -- step stalls noticeably on the actual device.
-local crankBaseParams <const> = {nil,0,nil,.002,.1,.3,nil,nil,nil,nil,nil,nil,.2,nil,nil,nil,nil,.7,.1,.1}
+local crankBaseParams <const> = {nil,0,nil,nil,.1,.3,nil,nil,nil,nil,nil,nil,.2,nil,nil,nil,nil,.7,.1,.1}
 local crankSound   -- built incrementally by buildNext(), with a progress display
 
 -- Synthesizing the cached sounds takes a moment on device (each sound's synth
