@@ -37,29 +37,18 @@ end
 -- Play a ZzFX sound. `params` is a table in the ZzFX array format (nil = use
 -- default). Returns nothing.
 function zzfx(params)
-    local a = denseParams(params)
-    return __zzfx(
-        a[1],  a[2],  a[3],  a[4],  a[5],  a[6],  a[7],
-        a[8],  a[9],  a[10], a[11], a[12], a[13], a[14],
-        a[15], a[16], a[17], a[18], a[19], a[20], a[21])
+    return __zzfx(table.unpack(denseParams(params), 1, 21))
 end
 
 -- Build a cached ZzFX sound object and play it repeatedly with optional
 -- per-play randomness (applied as playback-rate variation).
 function zzfxSound(params, randomness)
     local a = denseParams(params)
-    local soundRandomness = randomness
-    if soundRandomness == nil then
-        soundRandomness = a[2]
-    end
-
-    -- Build and cache with fixed randomness; apply variation at play time.
+    -- Cache with randomness off; apply pitch variation at play time instead.
+    local soundRandomness = randomness or a[2]
     a[2] = 0
 
-    local id = __zzfxCacheNew(
-        a[1],  a[2],  a[3],  a[4],  a[5],  a[6],  a[7],
-        a[8],  a[9],  a[10], a[11], a[12], a[13], a[14],
-        a[15], a[16], a[17], a[18], a[19], a[20], a[21])
+    local id = __zzfxCacheNew(table.unpack(a, 1, 21))
 
     assert(id and id ~= 0, "zzfxSound cache allocation failed; create fewer cached sounds or increase ZZFX_MAX_CACHED")
 

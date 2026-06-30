@@ -61,14 +61,15 @@ static float  sgnf(float v)              { return v < 0.0f ? -1.0f : 1.0f; }
 // Builds a 16-bit mono PCM buffer. Returns a buffer allocated with
 // pd->system->realloc (so the sample object can own and later free it), and
 // writes the sample count to *outLen. Returns NULL on failure.
-static int16_t* zzfx_build(
-    double volume,        double randomness,    double frequency,    double attack,
-    double sustain,       double release,       double shape,        double shapeCurve,
-    double slide,         double deltaSlide,    double pitchJump,    double pitchJumpTime,
-    double repeatTime,    double noise,         double modulation,   double bitCrush,
-    double delay,         double sustainVolume, double decay,        double tremolo,
-    double filter,        int* outLen)
+static int16_t* zzfx_build(const double p[21], int* outLen)
 {
+    double volume     = p[0],  randomness    = p[1],  frequency  = p[2],  attack        = p[3];
+    double sustain    = p[4],  release       = p[5],  shape      = p[6],  shapeCurve    = p[7];
+    double slide      = p[8],  deltaSlide    = p[9],  pitchJump  = p[10], pitchJumpTime = p[11];
+    double repeatTime = p[12], noise         = p[13], modulation = p[14], bitCrush      = p[15];
+    double delay      = p[16], sustainVolume = p[17], decay      = p[18], tremolo       = p[19];
+    double filter     = p[20];
+
     // The synth runs in SINGLE precision (float) so it uses the Playdate's
     // hardware FPU. The Cortex-M7 has no double-precision FPU, so doing this in
     // double falls back to slow software emulation -- on device that overruns
@@ -282,25 +283,30 @@ void zzfx_init(PlaydateAPI* pd)
     gVoiceCursor = 0;
 }
 
-void zzfx_play(const double p[21])
+// Grab the next voice (round-robin), stopping and freeing whatever it last
+// played. Only one-shot samples are owned (ownsSample); cached samples are
+// shared and freed by zzfxCacheFree, never here.
+static ZzfxVoice* zzfx_take_voice(void)
 {
-    if (!PD) return;
-
-    int len = 0;
-    int16_t* pcm = zzfx_build(p[0], p[1], p[2], p[3], p[4], p[5], p[6],
-                              p[7], p[8], p[9], p[10], p[11], p[12], p[13],
-                              p[14], p[15], p[16], p[17], p[18], p[19], p[20], &len);
-    if (!pcm || len <= 0) { if (pcm) PD->system->realloc(pcm, 0); return; }
-
     ZzfxVoice* v = &gVoices[gVoiceCursor];
     gVoiceCursor = (gVoiceCursor + 1) % ZZFX_NUM_VOICES;
-
-    // recycle the slot: stop and free whatever played here last
     PD->sound->sampleplayer->stop(v->player);
     if (v->sample && v->ownsSample)
         PD->sound->sample->freeSample(v->sample);
     v->sample = NULL;
     v->ownsSample = 0;
+    return v;
+}
+
+void zzfx_play(const double p[21])
+{
+    if (!PD) return;
+
+    int len = 0;
+    int16_t* pcm = zzfx_build(p, &len);
+    if (!pcm || len <= 0) { if (pcm) PD->system->realloc(pcm, 0); return; }
+
+    ZzfxVoice* v = zzfx_take_voice();
 
     // newSampleFromData keeps a pointer to (does not copy) the buffer.
     // shouldFreeData = 1 -> freeSample() frees the PCM buffer for us.
@@ -321,13 +327,12 @@ void zzfx_play(const double p[21])
 // ZzFX sound table into 21 positional arguments (filling defaults for nils),
 // so by the time we get here every argument should be a number; we still
 // default-fill defensively in case __zzfx is called directly.
-static int lua_zzfx(lua_State* L)
+// Read 21 ZzFX params from the Lua call args, using defaults for nil/missing.
+static void zzfx_read_params(double p[21])
 {
-    (void)L;
     static const double defaults[21] = {
         1, 0.05, 220, 0, 0, 0.1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0
     };
-    double p[21];
     int n = PD->lua->getArgCount();
     for (int i = 0; i < 21; i++)
     {
@@ -335,6 +340,13 @@ static int lua_zzfx(lua_State* L)
         if (pos > n || PD->lua->argIsNil(pos)) p[i] = defaults[i];
         else                                   p[i] = (double)PD->lua->getArgFloat(pos);
     }
+}
+
+static int lua_zzfx(lua_State* L)
+{
+    (void)L;
+    double p[21];
+    zzfx_read_params(p);
     zzfx_play(p);
     return 0;
 }
@@ -342,18 +354,8 @@ static int lua_zzfx(lua_State* L)
 static int lua_zzfx_cache_new(lua_State* L)
 {
     (void)L;
-    static const double defaults[21] = {
-        1, 0.05, 220, 0, 0, 0.1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0
-    };
-
     double p[21];
-    int n = PD->lua->getArgCount();
-    for (int i = 0; i < 21; i++)
-    {
-        int pos = i + 1;
-        if (pos > n || PD->lua->argIsNil(pos)) p[i] = defaults[i];
-        else                                   p[i] = (double)PD->lua->getArgFloat(pos);
-    }
+    zzfx_read_params(p);
 
     int slot = -1;
     for (int i = 0; i < ZZFX_MAX_CACHED; i++)
@@ -373,9 +375,7 @@ static int lua_zzfx_cache_new(lua_State* L)
     }
 
     int len = 0;
-    int16_t* pcm = zzfx_build(p[0], p[1], p[2], p[3], p[4], p[5], p[6],
-                              p[7], p[8], p[9], p[10], p[11], p[12], p[13],
-                              p[14], p[15], p[16], p[17], p[18], p[19], p[20], &len);
+    int16_t* pcm = zzfx_build(p, &len);
     if (!pcm || len <= 0)
     {
         if (pcm) PD->system->realloc(pcm, 0);
@@ -422,14 +422,8 @@ static int lua_zzfx_cache_play(lua_State* L)
 
     if (rate < 0.01f) rate = 0.01f;
 
-    ZzfxVoice* v = &gVoices[gVoiceCursor];
-    gVoiceCursor = (gVoiceCursor + 1) % ZZFX_NUM_VOICES;
-
-    PD->sound->sampleplayer->stop(v->player);
-    if (v->sample && v->ownsSample)
-        PD->sound->sample->freeSample(v->sample);
-    v->sample = gCached[slot].sample;
-    v->ownsSample = 0;
+    ZzfxVoice* v = zzfx_take_voice();
+    v->sample = gCached[slot].sample;   // shared sample; ownsSample stays 0
     PD->sound->sampleplayer->setSample(v->player, v->sample);
     PD->sound->sampleplayer->play(v->player, 1, rate);
     return 0;
