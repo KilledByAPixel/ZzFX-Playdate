@@ -7,6 +7,8 @@ paste the params into Lua, and play it instantly. No audio asset files needed.
 
 This repo includes a playable demo app.
 
+![ZzFX for Playdate demo screenshot](screenshot.png)
+
 ## Make sounds with the ZzFX editor
 
 Open the ZzFX sound editor:
@@ -92,10 +94,3 @@ the normal split for a mixed Lua + C Playdate project.
 - `sound:free()` releases cached sample memory.
 - `zzfxGetNote(semitoneOffset, rootFrequency)` returns note frequency.
 - C API is available in `src/zzfx.h` (`zzfx_init`, `zzfx_register_lua`, `zzfx_play`).
-
-## Demo
-
-A = Coin, B = Laser, Up = Jump, Down = Explosion, Left = Hit,
-Right = Powerup, Crank = musical scale.
-
-![ZzFX for Playdate demo screenshot](screenshot.png)
