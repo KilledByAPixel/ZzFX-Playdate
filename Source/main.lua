@@ -21,18 +21,18 @@ local math_abs <const> = math.abs
 local sounds <const> = {
     { key = "A",     name = "Coin",      params = 
     {nil,nil,1675,nil,.06,.24,1,nil,nil,nil,837,.06} },
-    { key = "B",     name = "Shoot",     params = {nil,nil,748,nil,nil,.3,1,nil,-3,nil,nil,nil,nil,nil,.6} },
-    { key = "Up",    name = "Jump",      params = {1.1,nil,254,.02,nil,.05,nil,nil,7} },
-    { key = "Down",  name = "Explosion", params = {1.1,nil,782,.03,.09,.3,nil,nil,nil,nil,nil,nil,nil,1.5,nil,.6,nil,.6} },
-    { key = "Left",  name = "Hit",       params = {1.2,nil,312,.01,.07,.06,1,nil,-3,9,nil,nil,nil,2,nil,.1,nil,.6,.04} },
-    { key = "Right", name = "Powerup",   params = {nil,nil,700,nil,.04,.3,1,nil,nil,nil,373,.06,.09}},
+    { key = "B",     name = "Shoot",     params = {nil,nil,750,nil,nil,.3,1,nil,-3,nil,nil,nil,nil,nil,.6} },
+    { key = "Up",    name = "Jump",      params = {1.1,nil,250,.02,nil,.07,nil,nil,9} },
+    { key = "Down",  name = "Explosion", params = {1.1,nil,800,.03,.1,.3,nil,nil,nil,nil,nil,nil,nil,1.5,nil,.6,nil,.6} },
+    { key = "Left",  name = "Hit",       params = {1.2,nil,320,.01,.07,.06,1,nil,-3,9,nil,nil,nil,1,nil,.1,nil,.6,.04} },
+    { key = "Right", name = "Powerup",   params = {nil,nil,700,nil,.04,.3,1,nil,nil,nil,370,.06,.09}},
 }
 
 -- The crank plays a musical scale. Build the beep ONCE as a cached sound, then
 -- pitch each note by changing playback rate (sound:playNote) instead of
 -- re-synthesizing a fresh ~0.8s sound on every crank step -- live synthesis per
 -- step stalls noticeably on the actual device.
-local crankBaseParams <const> = {nil,0,nil,.01,.1,.3,nil,nil,nil,nil,nil,nil,.2,nil,nil,nil,nil,.7,.1,.1}
+local crankBaseParams <const> = {nil,0,nil,.002,.1,.3,nil,nil,nil,nil,nil,nil,.2,nil,nil,nil,nil,.7,.1,.1}
 local crankSound   -- built incrementally by buildNext(), with a progress display
 
 -- Synthesizing the cached sounds takes a moment on device (each sound's synth
