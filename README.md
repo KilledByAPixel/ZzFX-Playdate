@@ -42,6 +42,25 @@ The editor's Lua output is ready to paste as-is — it already uses `nil` for
 empty slots. (If you copy the JS output instead, replace each empty `,,` slot
 with `nil`.)
 
+## Faster loading: bake to WAV for release (optional)
+
+While building your game, generating sounds from params is the easy path: no
+asset files to manage, and you tweak a sound just by changing numbers.
+
+When you're ready to ship, you can trade that flexibility for faster startup. The
+[ZzFX editor](https://killedbyapixel.github.io/ZzFX/) can also export a sound as a
+**WAV file**. Once your sounds are final, export them, drop the WAVs in `Source/`,
+and load them instead of synthesizing at launch:
+
+```lua
+local coin = playdate.sound.sampleplayer.new("coin")  -- ships as coin.wav
+coin:play()
+```
+
+It's the same sound (the editor renders the same ZzFX), just loaded from a file
+instead of generated — so a finished game with a lot of sounds boots faster. Best
+of both: iterate with params, release with WAVs.
+
 ## Build
 
 Requires the [Playdate SDK](https://play.date/dev/) with `PLAYDATE_SDK_PATH` set.
