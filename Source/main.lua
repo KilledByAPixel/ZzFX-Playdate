@@ -20,24 +20,39 @@ local math_abs <const> = math.abs
 -- (remember: replace JS empty array slots with `nil`).
 local sounds <const> = {
     { key = "A",     name = "Coin",      params = 
-    {nil,nil,1675,nil,.06,.24,1,1.82,nil,nil,837,.06} },
-    { key = "B",     name = "Laser",     params = {nil,nil,471,nil,.09,.47,4,1.06,-6.7,nil,nil,nil,nil,.9,nil,.6,nil,.62,.06} },
+    {nil,nil,1675,nil,.06,.24,1,nil,nil,nil,837,.06} },
+    { key = "B",     name = "Shoot",     params = {nil,nil,448,nil,nil,.3,3,nil,-2,nil,nil,nil,nil,nil,.4} },
     { key = "Up",    name = "Jump",      params = {1.1,nil,254,.02,nil,.05,nil,nil,7} },
-    { key = "Down",  name = "Explosion", params = {nil,nil,782,.03,.09,.31,3,2.62,nil,nil,nil,nil,nil,1.5,nil,.6,.06,.58} },
-    { key = "Left",  name = "Hit",       params = {nil,nil,925,.04,.3,.6,1,.3,nil,6.27,-184,.09,.17} },
-    { key = "Right", name = "Powerup",   params = {nil,nil,1300,nil,nil,.2,1,nil,nil,nil,nil,nil,nil,nil,nil,nil,nil,nil,.1} },
+    { key = "Down",  name = "Explosion", params = {1.1,nil,782,.03,.09,.3,3,1,nil,nil,nil,nil,nil,1.5,nil,.6,nil,.6} },
+    { key = "Left",  name = "Hit",       params = {1.2,nil,312,.01,.07,.06,1,nil,-3,9,nil,nil,nil,2,nil,.1,nil,.6,.04} },
+    { key = "Right", name = "Powerup",   params = {nil,nil,707,nil,.04,.3,1,nil,nil,nil,373,.06,.09}},
 }
-
-for _, s in ipairs(sounds) do
-    s.sound = zzfxSound(s.params)
-end
 
 -- The crank plays a musical scale. Build the beep ONCE as a cached sound, then
 -- pitch each note by changing playback rate (sound:playNote) instead of
 -- re-synthesizing a fresh ~0.8s sound on every crank step -- live synthesis per
 -- step stalls noticeably on the actual device.
 local crankBaseParams <const> = {nil,nil,220,.01,.5,.2,nil,nil,nil,nil,nil,nil,nil,nil,nil,nil,nil,1,.1}
-local crankSound = zzfxSound(crankBaseParams)
+local crankSound   -- built incrementally by buildNext(), with a progress display
+
+-- Synthesizing the cached sounds takes a moment on device (each sound's synth
+-- runs once, up front). We build ONE per frame and show "N of M" progress, so
+-- the wait is visible instead of a black screen. `booted` gates input until the
+-- sounds exist.
+local booted = false
+local buildIndex = 0                 -- how many sounds built so far
+local buildTotal = #sounds + 1       -- the button presets, plus the crank sound
+
+-- Build the next not-yet-built sound; flips `booted` once they're all done.
+local function buildNext()
+    buildIndex = buildIndex + 1
+    if buildIndex <= #sounds then
+        sounds[buildIndex].sound = zzfxSound(sounds[buildIndex].params)
+    else
+        crankSound = zzfxSound(crankBaseParams)
+    end
+    if buildIndex >= buildTotal then booted = true end
+end
 
 local zzfxDefaults <const> = {
     1, .05, 220, 0, 0, .1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0
@@ -120,6 +135,7 @@ local function updateWaveform(params)
 end
 
 local function playByKey(key)
+    if not booted then return end
     for _, s in ipairs(sounds) do
         if s.key == key then
             s.sound:play()
@@ -177,6 +193,16 @@ local function draw()
 end
 
 function playdate.update()
+    if not booted then
+        -- Build one sound per frame, drawing progress between each. (The frame is
+        -- shown after update() returns, so each "N of M" appears as that sound
+        -- finishes.) On the Simulator this flies by; on device you'll see it count.
+        gfx.clear()
+        gfx.drawTextAligned("*Loading sounds " .. (buildIndex + 1) .. " of " .. buildTotal .. "*",
+            200, 112, kTextAlignment.center)
+        buildNext()
+        return
+    end
     draw()
 end
 
@@ -193,6 +219,7 @@ function playdate.rightButtonDown()  playByKey("Right") end
 local majorScale <const> = { 0, 2, 4, 5, 7, 9, 11, 12 }   -- semitone offsets
 local lastNoteStep = nil
 function playdate.cranked(change, acceleratedChange)
+    if not booted then return end
     local step = math_floor(playdate.getCrankPosition() / (360 / #majorScale)) % #majorScale
     if step ~= lastNoteStep then
         lastNoteStep = step
