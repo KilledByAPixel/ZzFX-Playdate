@@ -8,9 +8,9 @@
 import "CoreLibs/graphics"
 import "zzfx"   -- provides the global zzfx({...})
 
--- The Playdate plays its own system "crank tick" sound while the crank turns,
--- which clashes with the notes we play on it. Turn it off (the OS automatically
--- re-enables crank sounds when the game exits).
+-- Silence the Playdate's built-in crank docking/undocking sound effects so they
+-- don't intrude when you undock the crank to play the scale. (The OS re-enables
+-- them automatically when the game exits.)
 playdate.setCrankSoundsDisabled(true)
 
 local gfx <const> = playdate.graphics

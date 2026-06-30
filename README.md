@@ -73,9 +73,11 @@ Open `ZzFX.pdx` in the Simulator, or upload to hardware from its Device menu.
 
 ## Use it in your own project
 
-Copy `Source/zzfx.lua` plus the `src/` C files (`zzfx.c`, `zzfx.h`, `main.c`)
-into your Playdate project, build it (the synth is C, so the toolchain above is
-required), then `import "zzfx"` and call `zzfx({...})`.
+Copy `Source/zzfx.lua` and the synth (`src/zzfx.c`, `src/zzfx.h`) into your
+project. From your own `eventHandler`, on `kEventInitLua`, call `zzfx_init(pd)`
+and `zzfx_register_lua(pd)` — see `src/main.c` for the ~10-line example. Then in
+Lua, `import "zzfx"` and call `zzfx({...})`. (The synth is C, so the toolchain
+above is required.)
 
 `Source/` is the Lua/assets folder the SDK builds; `src/` is the native C synth —
 the normal split for a mixed Lua + C Playdate project.
