@@ -188,17 +188,17 @@ function playdate.downButtonDown()   playByKey("Down")  end
 function playdate.leftButtonDown()   playByKey("Left")  end
 function playdate.rightButtonDown()  playByKey("Right") end
 
--- Crank: play notes on a scale, one per ~30 degrees (pitched via playback rate).
+-- Crank plays an ascending C major scale -- one octave (do re mi fa sol la ti do)
+-- per full rotation, pitched via the cached sound's playback rate.
+local majorScale <const> = { 0, 2, 4, 5, 7, 9, 11, 12 }   -- semitone offsets
 local lastNoteStep = nil
 function playdate.cranked(change, acceleratedChange)
-    local step = math_floor(playdate.getCrankPosition() / 30)
+    local step = math_floor(playdate.getCrankPosition() / (360 / #majorScale)) % #majorScale
     if step ~= lastNoteStep then
         lastNoteStep = step
-        -- Pitch the pre-built crank sound to this scale step (semitone offset).
-        -- No per-step synthesis -- just a playback-rate change, so it's instant.
-        crankSound:playNote(step)
+        crankSound:playNote(majorScale[step + 1])   -- pitch the cached sound; instant
         updateWaveform(crankBaseParams)
-        lastPlayed = "note " .. step
+        lastPlayed = "note " .. (step + 1)
     end
 end
 
