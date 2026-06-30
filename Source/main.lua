@@ -58,7 +58,6 @@ local zzfxDefaults <const> = {
     1, .05, 220, 0, 0, .1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0
 }
 
-local lastPlayed = "press a button"
 local waveformPoints = {}
 
 local function clamp(value, lo, hi)
@@ -139,7 +138,6 @@ local function playByKey(key)
     for _, s in ipairs(sounds) do
         if s.key == key then
             s.sound:play()
-            lastPlayed = s.name
             updateWaveform(s.params)
             return
         end
@@ -147,14 +145,15 @@ local function playByKey(key)
 end
 
 local function drawWaveformPanel()
-    local panelX, panelY, panelW, panelH = 228, 54, 160, 126
+    local panelX, panelY, panelW, panelH = 228, 88, 160, 134
+    gfx.drawText("*Waveform*", panelX, panelY - 20)
     gfx.drawRect(panelX, panelY, panelW, panelH)
 
     local midY = panelY + math_floor(panelH / 2)
     gfx.drawLine(panelX + 6, midY, panelX + panelW - 6, midY)
 
     if #waveformPoints < 2 then
-        gfx.drawText("press a control", panelX + 24, panelY + 52)
+        gfx.drawTextAligned("press a control", panelX + panelW / 2, midY - 8, kTextAlignment.center)
         return
     end
 
@@ -179,15 +178,15 @@ local function draw()
     gfx.drawText("*ZzFX for Playdate*", 12, 10)
     gfx.drawText("Synthesized live - no sound files", 12, 30)
 
-    local y = 58
-    local lineStep = 18
+    -- controls: bold key in a fixed column, name beside it
+    local x, y, step = 24, 72, 21
     for _, s in ipairs(sounds) do
-        gfx.drawText(s.key .. "  -  " .. s.name, 40, y)
-        y = y + lineStep
+        gfx.drawText("*" .. s.key .. "*", x, y)
+        gfx.drawText(s.name, x + 60, y)
+        y = y + step
     end
-
-    gfx.drawText("Crank  -  Musical scale", 40, y)
-    gfx.drawText("Last  -  " .. lastPlayed, 12, 206)
+    gfx.drawText("*Crank*", x, y)
+    gfx.drawText("Musical scale", x + 60, y)
 
     drawWaveformPanel()
 end
@@ -225,7 +224,6 @@ function playdate.cranked(change, acceleratedChange)
         lastNoteStep = step
         crankSound:playNote(majorScale[step + 1])   -- pitch the cached sound; instant
         updateWaveform(crankBaseParams)
-        lastPlayed = "note " .. (step + 1)
     end
 end
 
