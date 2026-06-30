@@ -40,46 +40,61 @@ function zzfx(params)
     return __zzfx(table.unpack(denseParams(params), 1, 21))
 end
 
--- Build a cached ZzFX sound object and play it repeatedly with optional
--- per-play randomness (applied as playback-rate variation).
-function zzfxSound(params, randomness)
-    local a = denseParams(params)
-    -- Cache with randomness off; apply pitch variation at play time instead.
-    local soundRandomness = randomness or a[2]
-    a[2] = 0
-
-    local id = __zzfxCacheNew(table.unpack(a, 1, 21))
-
-    assert(id and id ~= 0, "zzfxSound cache allocation failed; create fewer cached sounds or increase ZZFX_MAX_CACHED")
-
-    local sound = {
-        id = id,
-        params = a,
-        randomness = soundRandomness,
-    }
+-- Shared sound object used by both the synthesized and WAV-backed paths, so
+-- they expose the exact same interface. `playAtRate(rate)` triggers the sound;
+-- `freeFn()` releases it. Randomness is applied HERE as a per-play playback-rate
+-- (pitch) wobble -- which is why a baked WAV behaves just like a synth sound.
+local function makeSound(randomness, playAtRate, freeFn)
+    local sound = { randomness = randomness or 0 }
 
     function sound:play(pitch, randomnessScale)
         pitch = pitch or 1
         randomnessScale = randomnessScale or 1
         local rate = pitch + pitch * self.randomness * randomnessScale * (math.random() * 2 - 1)
         if rate < 0.01 then rate = 0.01 end
-        __zzfxCachePlay(self.id, rate)
+        playAtRate(rate)
     end
 
     function sound:playNote(semitoneOffset)
-        semitoneOffset = semitoneOffset or 0
-        local pitch = 2 ^ (semitoneOffset / 12)
-        self:play(pitch, 0)
+        self:play(2 ^ ((semitoneOffset or 0) / 12), 0)
     end
 
     function sound:free()
-        if self.id then
-            __zzfxCacheFree(self.id)
-            self.id = nil
-        end
+        if freeFn then freeFn() end
     end
 
     return sound
+end
+
+-- Build a reusable ZzFX sound object. `source` is either:
+--   * a ZzFX params table   -> synthesized once and cached (the usual path), or
+--   * a WAV/sample filename  -> loaded and wrapped in the SAME interface, so you
+--     can bake sounds to WAV for a faster-loading release and swap them in with
+--     no other code changes.
+-- Optional `randomness` is applied as per-play pitch variation. For the WAV case,
+-- export the file with randomness 0 and pass it here, matching how the
+-- synthesized path varies pitch at play time.
+function zzfxSound(source, randomness)
+    if type(source) == "string" then
+        local player = playdate.sound.sampleplayer.new(source)
+        assert(player, "zzfxSound: could not load sample '" .. source .. "'")
+        return makeSound(randomness or 0,
+            function(rate) player:setRate(rate); player:play() end,
+            function() player:stop() end)
+    end
+
+    -- params table: synthesize and cache (randomness off in the buffer; the
+    -- variation is applied per play instead).
+    local a = denseParams(source)
+    local soundRandomness = randomness or a[2]
+    a[2] = 0
+
+    local id = __zzfxCacheNew(table.unpack(a, 1, 21))
+    assert(id and id ~= 0, "zzfxSound cache allocation failed; create fewer cached sounds or increase ZZFX_MAX_CACHED")
+
+    return makeSound(soundRandomness,
+        function(rate) __zzfxCachePlay(id, rate) end,
+        function() if id then __zzfxCacheFree(id); id = nil end end)
 end
 
 -- Frequency of a note on the standard diatonic scale (ZZFX.getNote).

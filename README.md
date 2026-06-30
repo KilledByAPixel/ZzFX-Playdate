@@ -49,17 +49,25 @@ asset files to manage, and you tweak a sound just by changing numbers.
 
 When you're ready to ship, you can trade that flexibility for faster startup. The
 [ZzFX editor](https://killedbyapixel.github.io/ZzFX/) can also export a sound as a
-**WAV file**. Once your sounds are final, export them, drop the WAVs in `Source/`,
-and load them instead of synthesizing at launch:
+**WAV file**. Export your finished sounds (with randomness set to 0), drop the WAVs in
+`Source/`, and hand the filename to `zzfxSound` instead of a params table:
 
 ```lua
-local coin = playdate.sound.sampleplayer.new("coin")  -- ships as coin.wav
-coin:play()
+-- dev: synthesized from params
+local coin = zzfxSound({nil,nil,1675,nil,.06,.24,1,nil,nil,nil,837,.06}, .05)
+
+-- release: the baked WAV. Just swap the argument, nothing else changes.
+local coin = zzfxSound("coin", .05)
+
+coin:play()        -- same API
+coin:playNote(7)   -- and the .05 randomness is still applied at play time
 ```
 
-It's the same sound (the editor renders the same ZzFX), just loaded from a file
-instead of generated — so a finished game with a lot of sounds boots faster. Best
-of both: iterate with params, release with WAVs.
+`zzfxSound` takes either a params table or a WAV filename and returns the same
+object either way, so swapping is a one-line change. Loading a file is faster
+than synthesizing, so a game with a lot of sounds boots quicker. And because the
+randomness is applied at play time instead of baked in, the WAV still varies per
+play just like the synthesized version.
 
 ## Build
 
@@ -106,7 +114,9 @@ the normal split for a mixed Lua + C Playdate project.
 ## API
 
 - `zzfx(paramsTable)` plays one sound from ZzFX-style params (21-slot array format).
-- `zzfxSound(paramsTable, randomness?)` creates a cached sound object.
+- `zzfxSound(paramsTableOrWavPath, randomness?)` creates a sound object, from
+  params (synthesized + cached) or a WAV filename (loaded). Same `:play` /
+  `:playNote` / `:free` interface and same per-play randomness either way.
 - Create cached `zzfxSound` objects at startup and reuse them during gameplay.
 - `sound:play(pitch?, randomnessScale?)` plays the cached sound.
 - `sound:playNote(semitoneOffset?)` plays the cached sound as a note.
