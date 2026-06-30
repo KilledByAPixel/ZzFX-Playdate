@@ -8,11 +8,6 @@
 import "CoreLibs/graphics"
 import "zzfx"   -- provides the global zzfx({...})
 
--- Silence the Playdate's built-in crank docking/undocking sound effects so they
--- don't intrude when you undock the crank to play the scale. (The OS re-enables
--- them automatically when the game exits.)
-playdate.setCrankSoundsDisabled(true)
-
 local gfx <const> = playdate.graphics
 local math_floor <const> = math.floor
 local math_min <const> = math.min
