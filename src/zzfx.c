@@ -23,13 +23,13 @@
 // 11.6 ms of start latency is below the ~20-30 ms threshold of perception.
 #define ZZFX_LEAD_SILENCE  512
 
-// ZZFX.volume from the JS library (master scale). NOTE: the original applies
-// this twice (once while building samples, once on the playback gain node),
-// which gives ZzFX its characteristic, slightly conservative level. We keep
-// both for an identical sound. Raise ZZFX_PLAYBACK_VOLUME if you want the
-// Playdate speaker to be louder.
-#define ZZFX_BUILD_VOLUME     0.3    // applied inside buildSamples (do not change for fidelity)
-#define ZZFX_PLAYBACK_VOLUME  0.3    // applied on playback (bump toward 1.0 to get louder)
+// ZZFX.volume from the JS library (master scale, default .3). As of ZzFX 1.4
+// the JS library applies it once; earlier versions applied it twice by mistake
+// (while building samples and again on the playback gain node). We match 1.4:
+// the master volume is applied once, in the build. ZZFX_PLAYBACK_VOLUME is an
+// extra output gain for the Playdate speaker, 1.0 = none.
+#define ZZFX_BUILD_VOLUME     0.3    // master volume, same as ZZFX.volume in JS
+#define ZZFX_PLAYBACK_VOLUME  1.0    // extra gain on playback (lower to make everything quieter)
 
 // ---- state -----------------------------------------------------------------
 
@@ -210,16 +210,25 @@ static int16_t* zzfx_build(const double p[21], int* outLen)
 
         b[i] = s * fvolume;   // store sample (JS: b[i++] = s * volume)
 
-        // advance oscillator. The modulation cos and noise sin/pow are skipped
+        // advance oscillator. The modulation cos and the noise term are skipped
         // when those params are 0 (the common case) -- mathematically identical
-        // (cos(0)=1, the noise term is *0) but avoids two transcendentals/sample.
+        // (cos(0)=1, the noise term is *0).
         fslide += fdeltaSlide;
         ffreq  += fslide;
         f = (fmodulation != 0.0f) ? ffreq * cosf(fmodulation * modOffset) : ffreq;
         modOffset += 1.0f;
         t += f;
         if (fnoise != 0.0f)
-            t += f * fnoise * sinf(powf((float)i, 5.0f));
+        {
+            // noise: a random value in [-1,1), the same sequence as ZzFX 1.4's
+            // (i*i*PI2 % 2 - 1), which is 2*frac(i*i*pi) - 1. JS does that in
+            // double; a 24-bit float runs out of precision within ~40 ms, so it
+            // is done here in exact 32-bit integer math instead. 0x243F6A89 is
+            // the fractional part of pi in 0.32 fixed point. Two integer
+            // multiplies replace the old sinf(powf(i, 5)).
+            uint32_t h = (uint32_t)i * (uint32_t)i * 0x243F6A89u;
+            t += f * fnoise * ((float)h * (1.0f / 2147483648.0f) - 1.0f);
+        }
 
         // pitch jump
         if (jump && (++jump > fpitchJumpTime))

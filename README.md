@@ -1,6 +1,6 @@
 # ZzFX for Playdate
 
-Tiny real-time sound effects for Playdate, powered by ZzFX.
+Tiny real-time sound effects for Playdate, powered by ZzFX (tracks ZzFX 1.4).
 
 Design a sound in the [ZzFX sound designer](https://killedbyapixel.github.io/ZzFX/),
 paste the params into Lua, and play it instantly. No audio asset files needed.
